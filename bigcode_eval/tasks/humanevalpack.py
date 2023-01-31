@@ -225,6 +225,8 @@ class HumanEvalPack(Task):
             prompt = f'Below is an instruction that describes a task. Write a response that appropriately completes the request.\n\n### Instruction:\n{inp}\n\n### Response:\n{prompt_base}'
         elif self.prompt == "codellama":
             prompt = f"[INST] {inp.strip()} [/INST] {prompt_base}"
+        elif self.prompt == "code":
+            prompt = f"[INST]\n{inp.strip()}\n[/INST]\n{prompt_base}"
         else:
             raise ValueError(f"The --prompt argument {self.prompt} wasn't provided or isn't supported")
         # Strip off the final \n to make the tokens more natural
@@ -332,7 +334,10 @@ class HumanEvalPackGenerative(HumanEvalPack):
         :param references: list(str)
             list of str containing refrences
         """
-        code_metric = load("Muennighoff/code_eval_octopack")
+        # code_metric = evaluate.load("Muennighoff/code_eval_octopack")
+        from bigcode_eval.tasks.custom_metrics.humanevalpack.code_eval import CodeEval
+        code_metric = CodeEval()
+
         timeout = LANGUAGE_TO_TIMEOUT[self.DATASET_NAME]
         num_workers = LANGUAGE_TO_NUM_WORKERS[self.DATASET_NAME]
         language = self.DATASET_NAME if self.DATASET_NAME != "js" else "javascript"
@@ -453,6 +458,7 @@ class HumanEvalPackGenerative(HumanEvalPack):
         # Write logs to json
         with open("logs.json", "w") as f:
             json.dump(logs, f, indent=4, ensure_ascii=False)
+        results["logs"] = logs
 
         """Debugging help
         for i, (gen, ref) in enumerate(zip(generations, references)):

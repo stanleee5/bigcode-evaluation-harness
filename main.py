@@ -1,5 +1,6 @@
 import fnmatch
 import json
+import time
 import warnings
 
 import datasets
@@ -154,6 +155,12 @@ def parse_args():
         help="Path to save the results",
     )
     parser.add_argument(
+        "--log_output_path",
+        type=str,
+        default="evaluation_logs.json",
+        help="Path to save the evaluation logs",
+    )
+    parser.add_argument(
         "--save_generations",
         action="store_true",
         help="Whether to save code generations",
@@ -185,6 +192,18 @@ def parse_args():
         "--check_references",
         action="store_true",
         help="Don't run generation but benchmark groundtruth (useful for debugging)",
+    )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        default=None,
+        help="use inference endpoint to get generate inference",
+    )
+    parser.add_argument(
+        "--endpoint_type",
+        type=str,
+        default="tgi",
+        help="use inference endpoint to get generate inference",
     )
     return parser.parse_args()
 
@@ -227,6 +246,12 @@ def main():
         evaluator = Evaluator(accelerator, None, None, args)
         for task in task_names:
             results[task] = evaluator.evaluate(task)
+    elif args.endpoint:
+        assert args.modeltype == "causal"
+        if accelerator.is_main_process:
+            print("use endpoint inference for text-generation")
+
+        evaluator = Evaluator(accelerator, None, None, args)
     else:
         # here we generate code and save it (evaluation is optional but True by default)
         dict_precisions = {
@@ -308,7 +333,6 @@ def main():
                 raise ValueError("No eos_token or bos_token found")
         try:
             tokenizer.pad_token = tokenizer.eos_token
-            
         # Some models like CodeGeeX2 have pad_token as a read-only property
         except AttributeError:
             print("Not setting pad_token to eos_token")
@@ -316,7 +340,7 @@ def main():
         WIZARD_LLAMA_MODELS = [
             "WizardLM/WizardCoder-Python-34B-V1.0",
             "WizardLM/WizardCoder-34B-V1.0",
-            "WizardLM/WizardCoder-Python-13B-V1.0"
+            "WizardLM/WizardCoder-Python-13B-V1.0",
         ]
         if args.model in WIZARD_LLAMA_MODELS:
             tokenizer.bos_token = "<s>"
@@ -325,31 +349,50 @@ def main():
 
         evaluator = Evaluator(accelerator, model, tokenizer, args)
 
-        for task in task_names:
+    if not args.load_generations_path:
+        # use hf model or endpoint for generation
+        task_generations = dict()
+        start_time = time.perf_counter()
+        for task_name in task_names:
             if args.generation_only:
                 if accelerator.is_main_process:
                     print("generation mode only")
-                generations, references = evaluator.generate_text(task)
-                if accelerator.is_main_process:
-                    with open(args.save_generations_path, "w") as fp:
-                        json.dump(generations, fp)
-                        print(f"generations were saved at {args.save_generations_path}")
-                    if args.save_references:
-                        with open("references.json", "w") as fp:
-                            json.dump(references, fp)
-                            print("references were saved")
+                generations, references = evaluator.generate_text(task_name)
+                task_generations[task_name] = generations
             else:
-                results[task] = evaluator.evaluate(task)
+                results[task_name] = evaluator.evaluate(task_name, task_generations)
+                for k, v in results[task_name].items():
+                    if k != "logs":
+                        print(f"{task_name} - {k}: {v}")
+
+            if accelerator.is_main_process:
+                task_generations["elapsed"] = time.perf_counter() - start_time
+                with open(args.save_generations_path, "w") as fp:
+                    json.dump(task_generations, fp)
+                    print(f"generated tasks: {task_names}")
+                    print(f"generations added at {args.save_generations_path}")
 
     # Save all args to config
     results["config"] = vars(args)
+    log_results = dict()
     if not args.generation_only:
+        for task in task_names:
+            if task == "config":
+                continue
+            if "logs" in results[task]:
+                log_results[task] = results[task].get("logs")
+                del results[task]["logs"]
+
         dumped = json.dumps(results, indent=2)
         if accelerator.is_main_process:
             print(dumped)
 
         with open(args.metric_output_path, "w") as f:
             f.write(dumped)
+
+        logs_dumped = json.dumps(log_results, indent=2)
+        with open(args.log_output_path, "w") as f:
+            f.write(logs_dumped)
 
 
 if __name__ == "__main__":
