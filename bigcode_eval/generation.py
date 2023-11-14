@@ -58,6 +58,9 @@ def parallel_generations(task, dataset, accelerator, model, tokenizer, n_tasks, 
         "top_k": args.top_k,
         "max_length": args.max_length_generation,
     }
+    if not args.do_sample:
+        gen_kwargs = dict(do_sample=False, max_length=args.max_length_generation)
+
     stopping_criteria = []
     # The input_length / start_length set to 0 for now will be adjusted later
     # Check if the task has a custom check_fn method for the stopping criteria
