@@ -37,17 +37,7 @@ class TooLongFunctionCriteria(StoppingCriteria):
         return input_ids.shape[1] > int(self.input_length * self.multiplier)
         
 
-def parallel_generations(task, dataset, accelerator, model, tokenizer, n_tasks, args):
-    if args.load_generations_path:
-        # load generated code
-        with open(args.load_generations_path) as fp:
-            generations = json.load(fp)
-            if accelerator.is_main_process:
-                print(
-                    f"generations loaded, {n_tasks} selected from {len(generations)} with {len(generations[0])} candidates"
-                )
-        return generations[:n_tasks]
-
+def parallel_generations(task, task_name, dataset, accelerator, model, tokenizer, n_tasks, args):
     set_seed(args.seed, device_specific=True)
 
     # Setup generation settings

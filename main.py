@@ -1,5 +1,6 @@
 import fnmatch
 import json
+import time
 import warnings
 
 import datasets
@@ -308,7 +309,6 @@ def main():
                 raise ValueError("No eos_token or bos_token found")
         try:
             tokenizer.pad_token = tokenizer.eos_token
-            
         # Some models like CodeGeeX2 have pad_token as a read-only property
         except AttributeError:
             print("Not setting pad_token to eos_token")
@@ -316,7 +316,7 @@ def main():
         WIZARD_LLAMA_MODELS = [
             "WizardLM/WizardCoder-Python-34B-V1.0",
             "WizardLM/WizardCoder-34B-V1.0",
-            "WizardLM/WizardCoder-Python-13B-V1.0"
+            "WizardLM/WizardCoder-Python-13B-V1.0",
         ]
         if args.model in WIZARD_LLAMA_MODELS:
             tokenizer.bos_token = "<s>"
@@ -325,21 +325,24 @@ def main():
 
         evaluator = Evaluator(accelerator, model, tokenizer, args)
 
-        for task in task_names:
+        task_generations = dict()
+        start_time = time.perf_counter()
+        for task_name in task_names:
             if args.generation_only:
                 if accelerator.is_main_process:
                     print("generation mode only")
-                generations, references = evaluator.generate_text(task)
-                if accelerator.is_main_process:
-                    with open(args.save_generations_path, "w") as fp:
-                        json.dump(generations, fp)
-                        print(f"generations were saved at {args.save_generations_path}")
-                    if args.save_references:
-                        with open("references.json", "w") as fp:
-                            json.dump(references, fp)
-                            print("references were saved")
+                generations, references = evaluator.generate_text(task_name)
+                task_generations[task_name] = generations
             else:
-                results[task] = evaluator.evaluate(task)
+                results[task_name] = evaluator.evaluate(task_name, task_generations)
+                print(f"{task_name} results: {results[task_name]}")
+
+            if accelerator.is_main_process:
+                task_generations["elapsed"] = time.perf_counter() - start_time
+                with open(args.save_generations_path, "w") as fp:
+                    json.dump(task_generations, fp)
+                    print(f"generated tasks: {task_names}")
+                    print(f"generations added at {args.save_generations_path}")
 
     # Save all args to config
     results["config"] = vars(args)

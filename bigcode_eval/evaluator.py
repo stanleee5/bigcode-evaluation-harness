@@ -1,7 +1,9 @@
 import inspect
 import json
 import os
+import time
 import warnings
+from typing import Dict
 
 from bigcode_eval import tasks
 from bigcode_eval.generation import parallel_generations
@@ -43,24 +45,40 @@ class Evaluator:
         dataset = task.get_dataset()
         # if args.limit is None, use all samples
         n_tasks = self.args.limit if self.args.limit else len(dataset)
-        references = [task.get_reference(dataset[i]) for i in range(self.args.limit_start, self.args.limit_start+n_tasks)]
+        references = [task.get_reference(dataset[i]) for i in range(self.args.limit_start, self.args.limit_start + n_tasks)]
 
         if self.args.check_references:
             if "get_solution" in inspect.signature(task.get_reference).parameters:
-                solutions = [[task.get_reference(dataset[i], get_solution=True)] for i in range(self.args.limit_start, self.args.limit_start+n_tasks)]
+                solutions = [
+                    [task.get_reference(dataset[i], get_solution=True)]
+                    for i in range(
+                        self.args.limit_start, self.args.limit_start + n_tasks
+                    )
+                ]
             else:
                 solutions = [[ref] for ref in references]
             return solutions, references
 
-        generations = parallel_generations(
-            task,
-            dataset,
-            self.accelerator,
-            self.model,
-            self.tokenizer,
-            n_tasks=n_tasks,
-            args=self.args,
-        )
+        if self.args.load_generations_path:
+            # load generated code
+            with open(self.args.load_generations_path) as fp:
+                generations = json.load(fp)[task_name]
+                if self.accelerator.is_main_process:
+                    print(
+                        f"generations loaded, {n_tasks} selected from {len(generations)} with {len(generations[0])} candidates"
+                    )
+        else:
+            generations = parallel_generations(
+                task,
+                task_name,
+                dataset,
+                self.accelerator,
+                self.model,
+                self.tokenizer,
+                n_tasks=n_tasks,
+                args=self.args,
+            )
+
         if len(generations[0]) > self.args.n_samples:
             generations = [l[: self.args.n_samples] for l in generations]
             warnings.warn(
@@ -68,21 +86,21 @@ class Evaluator:
             )
         return generations, references
 
-    def evaluate(self, task_name):
+    def evaluate(self, task_name, task_generations: Dict = None):
+        start_time = time.perf_counter()
         task = tasks.get_task(task_name, self.args)
         if task.requires_execution and not self.allow_code_execution:
             raise ValueError(_WARNING)
 
         generations, references = self.generate_text(task_name)
+        if isinstance(task_generations, dict):
+            task_generations[task_name] = generations
+            task_generations[f"elapsed-{task_name}-generation"] = (
+                time.perf_counter() - start_time
+            )
 
         if self.accelerator.is_main_process:
             if not self.args.load_generations_path:
-                if self.args.save_generations:
-                    with open(self.args.save_generations_path, "w") as fp:
-                        json.dump(generations, fp)
-                        print(
-                            f"generations were saved at {self.args.save_generations_path}"
-                        )
                 if self.args.save_references:
                     with open("references.json", "w") as fp:
                         json.dump(references, fp)
