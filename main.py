@@ -187,6 +187,18 @@ def parse_args():
         action="store_true",
         help="Don't run generation but benchmark groundtruth (useful for debugging)",
     )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        default=None,
+        help="use inference endpoint to get generate inference",
+    )
+    parser.add_argument(
+        "--endpoint_type",
+        type=str,
+        default="tgi",
+        help="use inference endpoint to get generate inference",
+    )
     return parser.parse_args()
 
 
@@ -228,6 +240,12 @@ def main():
         evaluator = Evaluator(accelerator, None, None, args)
         for task in task_names:
             results[task] = evaluator.evaluate(task)
+    elif args.endpoint:
+        assert args.modeltype == "causal"
+        if accelerator.is_main_process:
+            print("use endpoint inference for text-generation")
+
+        evaluator = Evaluator(accelerator, None, None, args)
     else:
         # here we generate code and save it (evaluation is optional but True by default)
         dict_precisions = {
@@ -325,6 +343,8 @@ def main():
 
         evaluator = Evaluator(accelerator, model, tokenizer, args)
 
+    if not args.load_generations_path:
+        # use hf model or endpoint for generation
         task_generations = dict()
         start_time = time.perf_counter()
         for task_name in task_names:

@@ -7,6 +7,8 @@ from typing import Dict
 
 from bigcode_eval import tasks
 from bigcode_eval.generation import parallel_generations
+from bigcode_eval.inference import endpoint_inference
+
 
 _WARNING = """
 ################################################################################
@@ -67,6 +69,8 @@ class Evaluator:
                     print(
                         f"generations loaded, {n_tasks} selected from {len(generations)} with {len(generations[0])} candidates"
                     )
+        elif self.args.endpoint:
+            generations = endpoint_inference(self.args, task, dataset, n_tasks)
         else:
             generations = parallel_generations(
                 task,

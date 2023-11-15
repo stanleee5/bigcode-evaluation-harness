@@ -108,6 +108,20 @@ Some tasks don't require code execution such as
 `codexglue_code_to_text-<LANGUAGE>`/`codexglue_code_to_text-python-left`/`conala`/`concode` that use BLEU evaluation. In addition, we generate one candidate solution for each problem in these tasks, so use `n_samples=1` and `batch_size=1`. (Note that `batch_size` should always be equal or less than `n_samples`).
 * For APPS tasks, you can use `n_samples=1` for strict and average accuracies (from the original APPS paper) and `n_samples>1` for pass@k.
 
+**Use Inference Server (e.g. text-generation-inference)**
+```bash
+# add --endpoint(--endpoint_type) arguments
+python3 main.py \
+  --tasks <TASK_NAME> \
+  --max_length_generation <MAX_LENGTH> \
+  --temperature <TEMPERATURE> \
+  --do_sample True \
+  --n_samples 100 \
+  --allow_code_execution \
+  --save_generations \
+  --endpoint $TGI_ENDPOINT # --endpoint_type tgi
+```
+
 ### Generation only
 
 If you want to generate solutions without executing and evaluating the code, call `--generation_only`, in addition to the instructions above. This will save the solutions in a json file provided in `save_generation_path` in the working directory. 
