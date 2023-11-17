@@ -151,6 +151,12 @@ If you want to evaluate on MultiPL-E, we have a different Dockerfile since it re
 $ docker pull ghcr.io/bigcode-project/evaluation-harness-multiple
 $ docker tag ghcr.io/bigcode-project/evaluation-harness-multiple evaluation-harness-multiple
 ```
+for Multiple + HumanEvalPack, build container
+- TODO: fix humanevalsynthesize-go/rust
+```bash
+git checkout feat/multiple
+docker build -f Dockerfile-eval -t evaluation-harness-evaluation .
+```
 
 
 ### Building  Docker images
