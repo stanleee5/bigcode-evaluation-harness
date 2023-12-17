@@ -456,6 +456,7 @@ class HumanEvalPackGenerative(HumanEvalPack):
         # Write logs to json
         with open("logs.json", "w") as f:
             json.dump(logs, f, indent=4, ensure_ascii=False)
+        results["logs"] = logs
 
         """Debugging help
         for i, (gen, ref) in enumerate(zip(generations, references)):

@@ -155,6 +155,12 @@ def parse_args():
         help="Path to save the results",
     )
     parser.add_argument(
+        "--log_output_path",
+        type=str,
+        default="evaluation_logs.json",
+        help="Path to save the evaluation logs",
+    )
+    parser.add_argument(
         "--save_generations",
         action="store_true",
         help="Whether to save code generations",
@@ -355,7 +361,9 @@ def main():
                 task_generations[task_name] = generations
             else:
                 results[task_name] = evaluator.evaluate(task_name, task_generations)
-                print(f"{task_name} results: {results[task_name]}")
+                for k, v in results[task_name].items():
+                    if k != "logs":
+                        print(f"{task_name} - {k}: {v}")
 
             if accelerator.is_main_process:
                 task_generations["elapsed"] = time.perf_counter() - start_time
@@ -366,13 +374,25 @@ def main():
 
     # Save all args to config
     results["config"] = vars(args)
+    log_results = dict()
     if not args.generation_only:
+        for task in task_names:
+            if task == "config":
+                continue
+            if "logs" in results[task]:
+                log_results[task] = results[task].get("logs")
+                del results[task]["logs"]
+
         dumped = json.dumps(results, indent=2)
         if accelerator.is_main_process:
             print(dumped)
 
         with open(args.metric_output_path, "w") as f:
             f.write(dumped)
+
+        logs_dumped = json.dumps(log_results, indent=2)
+        with open(args.log_output_path, "w") as f:
+            f.write(logs_dumped)
 
 
 if __name__ == "__main__":
