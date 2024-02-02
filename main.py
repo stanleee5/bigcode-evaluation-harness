@@ -361,9 +361,10 @@ def main():
                 task_generations[task_name] = generations
             else:
                 results[task_name] = evaluator.evaluate(task_name, task_generations)
-                for k, v in results[task_name].items():
-                    if k != "logs":
-                        print(f"{task_name} - {k}: {v}")
+                if accelerator.is_main_process:
+                    for k, v in results[task_name].items():
+                        if k != "logs":
+                            print(f"{task_name} - {k}: {v}")
 
             if accelerator.is_main_process:
                 task_generations["elapsed"] = time.perf_counter() - start_time
@@ -375,7 +376,7 @@ def main():
     # Save all args to config
     results["config"] = vars(args)
     log_results = dict()
-    if not args.generation_only:
+    if not args.generation_only and accelerator.is_main_process:
         for task in task_names:
             if task == "config":
                 continue
@@ -384,8 +385,7 @@ def main():
                 del results[task]["logs"]
 
         dumped = json.dumps(results, indent=2)
-        if accelerator.is_main_process:
-            print(dumped)
+        print(dumped)
 
         with open(args.metric_output_path, "w") as f:
             f.write(dumped)
